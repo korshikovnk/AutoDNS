@@ -37,4 +37,5 @@ internal static class AppConstants
     public static readonly Color ActiveGreen = Color.FromArgb(0x21, 0xA3, 0x66);
     public static readonly Color AlertYellow = Color.FromArgb(0xE6, 0xA8, 0x17);
     public static readonly Color AlertRed = Color.FromArgb(0xD1, 0x24, 0x2F);
+    public static readonly Color UpdateBadge = Color.FromArgb(25, 102, 179);
 }

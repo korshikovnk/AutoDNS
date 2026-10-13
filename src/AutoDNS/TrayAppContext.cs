@@ -19,6 +19,10 @@ internal sealed class TrayAppContext : ApplicationContext
     private readonly Icon _iconOn;
     private readonly Icon _iconPartial;
     private readonly Icon _iconDown;
+    private readonly Icon _iconOffUpdate;
+    private readonly Icon _iconOnUpdate;
+    private readonly Icon _iconPartialUpdate;
+    private readonly Icon _iconDownUpdate;
 
     private readonly AppSettings _settings;
     private bool _busy;
@@ -68,6 +72,10 @@ internal sealed class TrayAppContext : ApplicationContext
         _iconOn = IconFactory.CreateTrayIcon(AppConstants.ActiveGreen);
         _iconPartial = IconFactory.CreateTrayIcon(AppConstants.AlertYellow);
         _iconDown = IconFactory.CreateTrayIcon(AppConstants.AlertRed);
+        _iconOffUpdate = IconFactory.CreateTrayIcon(Color.White, updateAvailable: true);
+        _iconOnUpdate = IconFactory.CreateTrayIcon(AppConstants.ActiveGreen, updateAvailable: true);
+        _iconPartialUpdate = IconFactory.CreateTrayIcon(AppConstants.AlertYellow, updateAvailable: true);
+        _iconDownUpdate = IconFactory.CreateTrayIcon(AppConstants.AlertRed, updateAvailable: true);
 
         _notifyIcon = new NotifyIcon
         {
@@ -546,6 +554,7 @@ internal sealed class TrayAppContext : ApplicationContext
             _updateAvailable = notice.UpdateAvailable;
             _versionText = notice.Text;
             ApplyVersionMenuItem();
+            ApplyTrayIcon();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -615,10 +624,13 @@ internal sealed class TrayAppContext : ApplicationContext
 
     private void ApplyTrayIcon()
     {
-        _notifyIcon.Icon = !_settings.DnsEnabled ? _iconOff
-            : _connectedSites == ProviderAvailability.Unavailable ? _iconDown
-            : _connectedSites == ProviderAvailability.Partial ? _iconPartial
-            : _iconOn;
+        _notifyIcon.Icon = !_settings.DnsEnabled
+            ? (_updateAvailable ? _iconOffUpdate : _iconOff)
+            : _connectedSites == ProviderAvailability.Unavailable
+                ? (_updateAvailable ? _iconDownUpdate : _iconDown)
+                : _connectedSites == ProviderAvailability.Partial
+                    ? (_updateAvailable ? _iconPartialUpdate : _iconPartial)
+                    : (_updateAvailable ? _iconOnUpdate : _iconOn);
     }
 
     private void ExitApp()
@@ -649,6 +661,10 @@ internal sealed class TrayAppContext : ApplicationContext
             _iconOn.Dispose();
             _iconPartial.Dispose();
             _iconDown.Dispose();
+            _iconOffUpdate.Dispose();
+            _iconOnUpdate.Dispose();
+            _iconPartialUpdate.Dispose();
+            _iconDownUpdate.Dispose();
             _hidden.Dispose();
         }
 

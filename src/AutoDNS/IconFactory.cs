@@ -10,9 +10,9 @@ internal static class IconFactory
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern bool DestroyIcon(IntPtr handle);
 
-    public static Icon CreateTrayIcon(Color fill)
+    public static Icon CreateTrayIcon(Color fill, bool updateAvailable = false)
     {
-        using var bitmap = CreateBitmap(32, fill);
+        using var bitmap = CreateBitmap(32, fill, updateAvailable);
         return ToIcon(bitmap);
     }
 
@@ -31,7 +31,7 @@ internal static class IconFactory
         }
     }
 
-    public static Bitmap CreateBitmap(int size, Color fill)
+    public static Bitmap CreateBitmap(int size, Color fill, bool updateAvailable = false)
     {
         var bitmap = new Bitmap(size, size, PixelFormat.Format32bppArgb);
         using var g = Graphics.FromImage(bitmap);
@@ -61,7 +61,22 @@ internal static class IconFactory
         g.DrawPath(outline, path);
         using var brush = new SolidBrush(fill);
         g.FillPath(brush, path);
+        if (updateAvailable)
+            DrawUpdateBadge(g, size);
         return bitmap;
+    }
+
+    internal static Rectangle UpdateBadgeBounds(int size)
+    {
+        var diameter = Math.Max(6, (int)Math.Round(size * 0.40));
+        var margin = Math.Max(1, (int)Math.Round(size * 0.03));
+        return new Rectangle(size - diameter - margin, margin, diameter, diameter);
+    }
+
+    private static void DrawUpdateBadge(Graphics graphics, int size)
+    {
+        using var brush = new SolidBrush(AppConstants.UpdateBadge);
+        graphics.FillEllipse(brush, UpdateBadgeBounds(size));
     }
 
     private static Icon ToIcon(Bitmap bitmap)
