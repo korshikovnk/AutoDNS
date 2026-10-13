@@ -2,10 +2,20 @@ using System.Drawing.Drawing2D;
 
 namespace AutoDNS;
 
-internal sealed class ProviderMenuItem(string text, string providerId) : ToolStripMenuItem(text)
+internal sealed class ProviderMenuItem : ToolStripMenuItem
 {
+    private const int StatusWidth = 16;
+    private const int StatusRightMargin = 8;
+    private Bitmap? _statusImage;
     private int _spinnerAngle;
-    public string ProviderId { get; } = providerId;
+
+    public ProviderMenuItem(string text, string providerId) : base(text)
+    {
+        ProviderId = providerId;
+        Padding = new Padding(0, 0, StatusWidth + StatusRightMargin + 4, 0);
+    }
+
+    public string ProviderId { get; }
     public bool IsConnecting { get; private set; }
     public ProviderAvailability Availability { get; private set; }
     public int SpinnerAngle
@@ -37,16 +47,35 @@ internal sealed class ProviderMenuItem(string text, string providerId) : ToolStr
 
     private void RefreshImage()
     {
-        var oldImage = Image;
-        Image = AppSettings.IsAutomatic(ProviderId) && !IsConnecting
-            ? null : CreateStatusImage(IsConnecting ? ProviderAvailability.Checking : Availability, SpinnerAngle);
+        var oldImage = _statusImage;
+        _statusImage = AppSettings.IsAutomatic(ProviderId) && !IsConnecting
+            ? null
+            : CreateStatusImage(IsConnecting ? ProviderAvailability.Checking : Availability, SpinnerAngle);
         oldImage?.Dispose();
         Invalidate();
     }
 
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        if (_statusImage is null)
+            return;
+
+        var visibleRight = Width;
+        if (Parent is { ClientSize.Width: > 0 })
+            visibleRight = Math.Min(Width, Parent.ClientSize.Width - Math.Max(Bounds.X, 0));
+
+        var x = visibleRight - StatusWidth - StatusRightMargin;
+        var y = Math.Max(0, (Height - _statusImage.Height) / 2);
+        if (x < 0)
+            return;
+
+        e.Graphics.DrawImageUnscaled(_statusImage, x, y);
+    }
+
     internal static Bitmap CreateStatusImage(ProviderAvailability status, int angle)
     {
-        var image = new Bitmap(16, 16);
+        var image = new Bitmap(StatusWidth, StatusWidth);
         using var graphics = Graphics.FromImage(image);
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
         using var pen = new Pen(SystemColors.Highlight, 2)
@@ -88,9 +117,8 @@ internal sealed class ProviderMenuItem(string text, string providerId) : ToolStr
     {
         if (disposing)
         {
-            var image = Image;
-            Image = null;
-            image?.Dispose();
+            _statusImage?.Dispose();
+            _statusImage = null;
         }
         base.Dispose(disposing);
     }

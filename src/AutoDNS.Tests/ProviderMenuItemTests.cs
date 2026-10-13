@@ -13,7 +13,7 @@ public class ProviderMenuItemTests
             using var menu = new System.Windows.Forms.ContextMenuStrip
             {
                 ShowCheckMargin = true,
-                ShowImageMargin = true
+                ShowImageMargin = false
             };
             var available = new ProviderMenuItem("dns.malw.link", "malw");
             var partial = new ProviderMenuItem("Comss.one", "comss");
@@ -27,30 +27,45 @@ public class ProviderMenuItemTests
             available.SetAvailability(ProviderAvailability.Available, "Все открываются");
             partial.SetAvailability(ProviderAvailability.Partial, "Не открывается: Cursor.");
             unavailable.SetAvailability(ProviderAvailability.Unavailable, "Не открываются все");
-            Assert.NotNull(available.Image);
-            Assert.NotNull(partial.Image);
-            Assert.NotNull(unavailable.Image);
+            Assert.Null(available.Image);
             menu.CreateControl();
+            menu.PerformLayout();
+            var preferred = menu.GetPreferredSize(System.Drawing.Size.Empty);
+            var itemWidth = menu.Items.Cast<ToolStripItem>().Max(item => item.Width);
+            menu.Size = new System.Drawing.Size(Math.Max(preferred.Width, itemWidth), Math.Max(preferred.Height, menu.Height));
             menu.PerformLayout();
             using var bitmap = new System.Drawing.Bitmap(menu.Width, menu.Height);
             menu.DrawToBitmap(bitmap, new System.Drawing.Rectangle(System.Drawing.Point.Empty, bitmap.Size));
-            var green = 0;
-            var yellow = 0;
-            var red = 0;
+            var greenLeft = 0;
+            var greenRight = 0;
+            var yellowRight = 0;
+            var redRight = 0;
+            var split = bitmap.Width * 2 / 3;
             for (var y = 0; y < bitmap.Height; y++)
             for (var x = 0; x < bitmap.Width; x++)
             {
                 var pixel = bitmap.GetPixel(x, y);
-                if (pixel.G > pixel.R * 1.5 && pixel.G > pixel.B * 1.2) green++;
-                if (pixel.R > 180 && pixel.G > 120 && pixel.B < 80) yellow++;
-                if (pixel.R > pixel.G * 2 && pixel.R > pixel.B * 2) red++;
+                var green = pixel.G > pixel.R * 1.5 && pixel.G > pixel.B * 1.2;
+                var yellow = pixel.R > 180 && pixel.G > 120 && pixel.B < 80;
+                var red = pixel.R > pixel.G * 2 && pixel.R > pixel.B * 2;
+                if (x < split)
+                {
+                    if (green) greenLeft++;
+                }
+                else
+                {
+                    if (green) greenRight++;
+                    if (yellow) yellowRight++;
+                    if (red) redRight++;
+                }
             }
             var previewPath = Environment.GetEnvironmentVariable("AUTODNS_UI_PREVIEW_PATH");
             if (!string.IsNullOrWhiteSpace(previewPath))
                 bitmap.Save(previewPath, System.Drawing.Imaging.ImageFormat.Png);
-            Assert.True(green > 5, "Green status icon is missing from the rendered menu.");
-            Assert.True(yellow > 5, "Yellow status icon is missing from the rendered menu.");
-            Assert.True(red > 5, "Red status icon is missing from the rendered menu.");
+            Assert.True(greenRight > 5, "Green status icon is missing from the right side.");
+            Assert.True(yellowRight > 5, "Yellow status icon is missing from the right side.");
+            Assert.True(redRight > 5, "Red status icon is missing from the right side.");
+            Assert.True(greenRight > greenLeft, "Status icon is still on the left.");
         });
     }
 
@@ -146,6 +161,14 @@ public class ProviderMenuItemTests
         ToolStripDropDownCloseReason reason, bool allowDismiss, bool cancel)
     {
         Assert.Equal(cancel, TrayAppContext.ShouldCancelMenuClose(reason, allowDismiss));
+    }
+
+    [Fact]
+    public void AutoUpdateSubmenu_IsPlacedToTheLeftOfItsOwner()
+    {
+        var location = TrayAppContext.LeftSubmenuScreenLocation(new Point(500, 240), new Size(140, 80));
+        Assert.Equal(new Point(360, 240), location);
+        Assert.True(location.X < 500);
     }
 
     private static void OnUiThread(Action action)

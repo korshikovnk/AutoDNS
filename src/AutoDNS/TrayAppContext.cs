@@ -54,7 +54,7 @@ internal sealed class TrayAppContext : ApplicationContext
 
         _menu = new ContextMenuStrip
         {
-            ShowImageMargin = true,
+            ShowImageMargin = false,
             ShowCheckMargin = true,
             ShowItemToolTips = true
         };
@@ -393,6 +393,7 @@ internal sealed class TrayAppContext : ApplicationContext
         _menu.Items.Add(autoStart);
 
         var autoUpdate = new ToolStripMenuItem("Автообновление");
+        KeepSubmenuOnTheLeft(autoUpdate);
         autoUpdate.DropDown.Closing += OnMenuClosing;
         autoUpdate.DropDownItems.Add(CreateIntervalItem("Выкл.", AutoUpdateInterval.Off));
         autoUpdate.DropDownItems.Add(CreateIntervalItem("Каждый час", AutoUpdateInterval.Hour));
@@ -417,6 +418,30 @@ internal sealed class TrayAppContext : ApplicationContext
 
         _rebuilding = false;
     }
+
+    private static void KeepSubmenuOnTheLeft(ToolStripMenuItem item)
+    {
+        item.DropDownDirection = ToolStripDropDownDirection.Left;
+        var placing = false;
+        item.DropDownOpening += (_, _) => item.DropDownDirection = ToolStripDropDownDirection.Left;
+        item.DropDown.LocationChanged += (_, _) =>
+        {
+            if (placing || item.DropDown.Width <= 0 || item.Owner is not ToolStrip parent)
+                return;
+
+            var ownerOnScreen = parent.PointToScreen(item.Bounds.Location);
+            var location = LeftSubmenuScreenLocation(ownerOnScreen, item.DropDown.Size);
+            if (item.DropDown.Location == location)
+                return;
+
+            placing = true;
+            item.DropDown.Location = location;
+            placing = false;
+        };
+    }
+
+    internal static Point LeftSubmenuScreenLocation(Point ownerItemScreen, Size submenuSize) =>
+        new(ownerItemScreen.X - submenuSize.Width, ownerItemScreen.Y);
 
     private void OnMenuClosing(object? sender, ToolStripDropDownClosingEventArgs e)
     {
