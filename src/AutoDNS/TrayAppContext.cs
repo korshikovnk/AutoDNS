@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace AutoDNS;
@@ -28,6 +29,8 @@ internal sealed class TrayAppContext : ApplicationContext
     private string? _pendingProviderId;
     private string? _operationStatus;
     private string? _lastConnectionError;
+    private bool _updateAvailable;
+    private string _versionText = ReleaseCheck.CurrentNotice().Text;
     private bool _exitRequested;
     private readonly CancellationTokenSource _lifetime = new();
     private bool _statusCheckRunning;
@@ -149,6 +152,7 @@ internal sealed class TrayAppContext : ApplicationContext
             return;
 
         _busy = true;
+        _ = CheckForAppUpdateAsync();
         var providerId = selectedProviderId ?? _settings.ProviderId;
         _pendingProviderId = providerId;
         _lastConnectionError = null;
@@ -345,10 +349,15 @@ internal sealed class TrayAppContext : ApplicationContext
         _rebuilding = true;
         _menu.Items.Clear();
 
+        var version = new ToolStripMenuItem(_versionText) { Name = "versionStatus" };
+        version.Click += OnVersionClicked;
+        _menu.Items.Add(version);
+        ApplyVersionMenuItem();
+
         var lastUpdate = new ToolStripMenuItem(FormatLastUpdate()) { Enabled = false, Name = "lastUpdate" };
         _menu.Items.Add(lastUpdate);
 
-        var apply = new ToolStripMenuItem("Обновить DNS") { Name = "apply" };
+        var apply = new ToolStripMenuItem("Обновить") { Name = "apply" };
         apply.Click += async (_, _) => await Task.WhenAll(
             RefreshAndApplyAsync(), RefreshProviderStatusesAsync(force: true)).ConfigureAwait(true);
         _menu.Items.Add(apply);
@@ -502,6 +511,44 @@ internal sealed class TrayAppContext : ApplicationContext
         _settings.AutoStart = item.Checked;
         _settings.Save();
         TaskSchedulerService.SetLogonEnabled(item.Checked);
+    }
+
+    private async Task CheckForAppUpdateAsync()
+    {
+        try
+        {
+            var notice = await ReleaseCheck.CheckAsync(_lifetime.Token).ConfigureAwait(true);
+            _updateAvailable = notice.UpdateAvailable;
+            _versionText = notice.Text;
+            ApplyVersionMenuItem();
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void ApplyVersionMenuItem()
+    {
+        if (_menu.Items["versionStatus"] is not ToolStripMenuItem item)
+            return;
+
+        item.Text = _versionText;
+        item.Enabled = _updateAvailable;
+    }
+
+    private void OnVersionClicked(object? sender, EventArgs e)
+    {
+        if (!_updateAvailable)
+            return;
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(ReleaseCheck.ReleasesPageUrl) { UseShellExecute = true });
+        }
+        catch
+        {
+            // The browser could not be opened.
+        }
     }
 
     private void UpdateLastUpdateText()
