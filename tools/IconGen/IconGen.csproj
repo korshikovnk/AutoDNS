@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>AutoDNS</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\src\AutoDNS\AppConstants.cs" Link="AppConstants.cs" />
+    <Compile Include="..\..\src\AutoDNS\IconFactory.cs" Link="IconFactory.cs" />
+  </ItemGroup>
+</Project>

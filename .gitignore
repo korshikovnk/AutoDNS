@@ -1,0 +1,11 @@
+bin/
+obj/
+publish/
+dist/
+.vs/
+TestResults/
+*.user
+*.suo
+*.log
+tools/InnoSetup/
+src/AutoDNS/Assets/*.png
