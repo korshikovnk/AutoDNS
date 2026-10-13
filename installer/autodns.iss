@@ -1,5 +1,5 @@
 #define MyAppName "AutoDNS"
-#define MyAppVersion "2.5"
+#define MyAppVersion "2.6"
 #define MyAppPublisher "AutoDNS"
 #define MyAppExeName "AutoDNS.exe"
 

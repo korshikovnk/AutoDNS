@@ -11,17 +11,25 @@ public class IconFactoryTests
         using var plain = IconFactory.CreateBitmap(32, Color.White);
         using var badged = IconFactory.CreateBitmap(32, Color.White, updateAvailable: true);
         var bounds = IconFactory.UpdateBadgeBounds(32);
+        var centerX = bounds.X + bounds.Width / 2;
+        var centerY = bounds.Y + bounds.Height / 2;
 
-        Assert.True(bounds.X > 32 / 2);
-        Assert.True(bounds.Bottom <= 32 / 2 + 2);
+        Assert.Equal(32, bounds.Right);
+        Assert.Equal(0, bounds.Y);
+        Assert.True(centerX > 32 / 2);
+        Assert.True(centerY < 32 / 2);
         Assert.Equal(0, CountBadgePixels(plain));
         Assert.True(CountBadgePixels(badged, bounds) > 0);
         Assert.Equal(0, CountBadgePixelsOutside(badged, bounds));
 
-        var center = badged.GetPixel(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2);
+        var center = badged.GetPixel(centerX, centerY);
         Assert.InRange(center.R, 15, 40);
         Assert.InRange(center.G, 90, 120);
         Assert.InRange(center.B, 160, 200);
+
+        var ring = badged.GetPixel(centerX, bounds.Y + 1);
+        Assert.True(ring.A > 180);
+        Assert.True(ring.R > 200 && ring.G > 200 && ring.B > 200);
     }
 
     private static int CountBadgePixels(Bitmap bitmap, Rectangle? region = null)

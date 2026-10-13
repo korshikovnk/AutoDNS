@@ -66,17 +66,24 @@ internal static class IconFactory
         return bitmap;
     }
 
+    internal static int UpdateBadgeOutline(int size) =>
+        Math.Max(2, (int)Math.Round(size * 0.06));
+
     internal static Rectangle UpdateBadgeBounds(int size)
     {
-        var diameter = Math.Max(6, (int)Math.Round(size * 0.40));
-        var margin = Math.Max(1, (int)Math.Round(size * 0.03));
-        return new Rectangle(size - diameter - margin, margin, diameter, diameter);
+        var diameter = Math.Max(8, (int)Math.Round(size * 0.50));
+        return new Rectangle(size - diameter, 0, diameter, diameter);
     }
 
     private static void DrawUpdateBadge(Graphics graphics, int size)
     {
+        var bounds = UpdateBadgeBounds(size);
+        var outline = UpdateBadgeOutline(size);
+        using var outlineBrush = new SolidBrush(Color.White);
+        graphics.FillEllipse(outlineBrush, bounds);
+        var inner = Rectangle.Inflate(bounds, -outline, -outline);
         using var brush = new SolidBrush(AppConstants.UpdateBadge);
-        graphics.FillEllipse(brush, UpdateBadgeBounds(size));
+        graphics.FillEllipse(brush, inner);
     }
 
     private static Icon ToIcon(Bitmap bitmap)
