@@ -64,6 +64,13 @@ internal sealed class ProviderMenuItem(string text, string providerId) : ToolStr
                 pen.Color = AppConstants.ActiveGreen;
                 graphics.DrawLines(pen, [new PointF(2, 8), new PointF(6, 12), new PointF(14, 3)]);
                 break;
+            case ProviderAvailability.Partial:
+                pen.Color = AppConstants.AlertYellow;
+                graphics.DrawEllipse(pen, 2, 2, 12, 12);
+                graphics.DrawLine(pen, 8, 5, 8, 9);
+                using (var dot = new SolidBrush(AppConstants.AlertYellow))
+                    graphics.FillEllipse(dot, 6.5f, 11, 3, 3);
+                break;
             case ProviderAvailability.Unavailable:
                 pen.Color = Color.Firebrick;
                 graphics.DrawLine(pen, 3, 3, 13, 13);

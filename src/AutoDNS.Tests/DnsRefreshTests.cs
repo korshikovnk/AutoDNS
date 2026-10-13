@@ -53,18 +53,13 @@ public class DnsRefreshTests
         }));
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             DnsHealthCheck.EnsureAvailableAsync(DnsCatalog.EndpointsFrom(DnsCatalog.Require("xbox")), http));
-        Assert.Contains("Выберите другого поставщика", exception.Message);
+        Assert.Contains("не отвечает", exception.Message);
     }
 
     [Fact]
     public async Task HealthCheck_AcceptsSuccessfulDnsReply()
     {
-        var message = new byte[45];
-        message[0] = 0x12;
-        message[1] = 0x34;
-        message[2] = 0x81;
-        message[3] = 0x80;
-        message[7] = 1;
+        var message = DnsReply("example.com", IPAddress.Parse("1.2.3.4"));
         using var http = new HttpClient(new ResponseHandler(() =>
         {
             var content = new ByteArrayContent(message);
@@ -72,11 +67,42 @@ public class DnsRefreshTests
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
         }));
         await DnsHealthCheck.EnsureAvailableAsync(DnsCatalog.EndpointsFrom(DnsCatalog.Require("malw")), http);
+        Assert.Equal([IPAddress.Parse("1.2.3.4")], DnsHealthCheck.ReadIpv4Answers(message));
         message[3] = 0x82; // SERVFAIL
         Assert.False(DnsHealthCheck.IsSuccessfulResponse(message));
         message[3] = 0x80;
         message[7] = 0;
         Assert.False(DnsHealthCheck.IsSuccessfulResponse(message));
+    }
+
+    [Fact]
+    public void SiteAccessDescription_NamesFailures_WithoutUncheckedDisclaimer()
+    {
+        Assert.Equal("ChatGPT, Gemini, Claude, Grok и Cursor открываются.", DnsHealthCheck.DescribeSiteAccess([]));
+        Assert.Equal("Не открывается: Cursor.", DnsHealthCheck.DescribeSiteAccess(["Cursor"]));
+        Assert.Equal("Не открываются: Claude, Cursor.", DnsHealthCheck.DescribeSiteAccess(["Claude", "Cursor"]));
+        Assert.Equal(ProviderAvailability.Available, DnsHealthCheck.StatusFromFailures(0, 5));
+        Assert.Equal(ProviderAvailability.Partial, DnsHealthCheck.StatusFromFailures(1, 5));
+        Assert.Equal(ProviderAvailability.Unavailable, DnsHealthCheck.StatusFromFailures(5, 5));
+        Assert.DoesNotContain("не проверен", DnsHealthCheck.DescribeSiteAccess([]));
+    }
+
+    private static byte[] DnsReply(string domain, IPAddress address)
+    {
+        var query = DnsHealthCheck.BuildQuery(domain);
+        var message = new byte[query.Length + 16];
+        query.CopyTo(message, 0);
+        message[2] = 0x81;
+        message[3] = 0x80;
+        message[7] = 1;
+        var answer = query.Length;
+        message[answer] = 0xC0;
+        message[answer + 1] = 0x0C;
+        message[answer + 3] = 1;
+        message[answer + 5] = 1;
+        message[answer + 11] = 4;
+        address.GetAddressBytes().CopyTo(message, answer + 12);
+        return message;
     }
 
     [Fact]

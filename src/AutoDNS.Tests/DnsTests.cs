@@ -33,6 +33,10 @@ public class DnsCatalogTests
     {
         Assert.Equal(DnsCatalog.All.Count, DnsCatalog.All.Select(p => p.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.NotNull(DnsCatalog.Find(AppConstants.DefaultProviderId));
+        var comss = DnsCatalog.Require("comss");
+        Assert.Equal("Comss.one", comss.DisplayName);
+        Assert.Equal("https://dns.comss.one/dns-query", comss.DohTemplate);
+        Assert.Equal(["83.220.169.155", "212.109.195.93"], comss.Ipv4);
         Assert.All(DnsCatalog.All, provider =>
         {
             Assert.False(string.IsNullOrWhiteSpace(provider.DisplayName));

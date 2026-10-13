@@ -30,17 +30,17 @@ internal static class DnsRefreshService
                         ipv6 = parsed6;
                 }
             }
+            catch (ProviderUnavailableException)
+            {
+                throw;
+            }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
             }
-            catch (HttpRequestException)
+            catch
             {
-                // Keep fallback addresses when the provider page is unavailable.
-            }
-            catch (OperationCanceledException)
-            {
-                // Keep the last known fallback addresses if the provider page is unavailable.
+                // A broken provider page must not decide whether its DNS works.
             }
         }
 

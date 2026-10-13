@@ -10,21 +10,22 @@ public class ProviderAvailabilityTests
         var provider = DnsCatalog.Require("malw");
         var result = await ProviderAvailabilityCheck.CheckAsync(provider,
             _ => Task.FromResult(DnsCatalog.EndpointsFrom(provider)),
-            (_, _) => Task.CompletedTask, CancellationToken.None);
+            (_, _) => OpenSites(), CancellationToken.None);
         Assert.Equal(ProviderAvailability.Available, result.Status);
-        Assert.Contains("Доступ к отдельным сайтам не проверен", result.Description);
+        Assert.Equal("ChatGPT, Gemini, Claude, Grok и Cursor открываются.", result.Description);
+        Assert.DoesNotContain("не проверен", result.Description);
     }
 
     [Fact]
-    public async Task OfficialOutage_ReportsUnavailable_EvenWhenDnsWouldReply()
+    public async Task ProviderPageFailure_DoesNotReplaceSiteCheck()
     {
         var dnsChecked = false;
         var result = await ProviderAvailabilityCheck.CheckAsync(DnsCatalog.Require("xbox"),
             _ => Task.FromException<DnsEndpoints>(new ProviderUnavailableException("Сервис недоступен")),
-            (_, _) => { dnsChecked = true; return Task.CompletedTask; }, CancellationToken.None);
-        Assert.Equal(ProviderAvailability.Unavailable, result.Status);
-        Assert.False(dnsChecked);
-        Assert.Contains("недоступен", result.Description);
+            (_, _) => { dnsChecked = true; return OpenSites(); }, CancellationToken.None);
+        Assert.Equal(ProviderAvailability.Available, result.Status);
+        Assert.True(dnsChecked);
+        Assert.DoesNotContain("недоступен", result.Description);
     }
 
     [Fact]
@@ -33,7 +34,7 @@ public class ProviderAvailabilityTests
         var provider = DnsCatalog.Require("malw");
         var result = await ProviderAvailabilityCheck.CheckAsync(provider,
             _ => Task.FromResult(DnsCatalog.EndpointsFrom(provider)),
-            (_, _) => Task.FromException(new HttpRequestException("Connection failed")), CancellationToken.None);
+            (_, _) => Task.FromException<SiteAccess>(new HttpRequestException("Connection failed")), CancellationToken.None);
         Assert.Equal(ProviderAvailability.Unavailable, result.Status);
     }
 
@@ -44,6 +45,9 @@ public class ProviderAvailabilityTests
         shutdown.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ProviderAvailabilityCheck.CheckAsync(
             DnsCatalog.Require("malw"), token => Task.FromCanceled<DnsEndpoints>(token),
-            (_, _) => Task.CompletedTask, shutdown.Token));
+            (_, _) => OpenSites(), shutdown.Token));
     }
+
+    private static Task<SiteAccess> OpenSites() =>
+        Task.FromResult(new SiteAccess(ProviderAvailability.Available, DnsHealthCheck.DescribeSiteAccess([])));
 }

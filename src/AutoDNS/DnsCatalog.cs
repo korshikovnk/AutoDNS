@@ -27,6 +27,13 @@ internal static class DnsCatalog
             ["2a12:bec4:1bb0:27dd::2", "2a13:82c0:0:d::3"],
             "https://info.dns.malw.link/setup"),
         new(
+            "comss",
+            "Comss.one",
+            "https://dns.comss.one/dns-query",
+            ["83.220.169.155", "212.109.195.93"],
+            [],
+            "https://www.comss.ru/page.php?id=7315"),
+        new(
             "xbox",
             "Xbox DNS",
             "https://xbox-dns.ru/dns-query",

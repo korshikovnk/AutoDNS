@@ -5,6 +5,7 @@ internal enum ProviderAvailability
     Unknown,
     Checking,
     Available,
+    Partial,
     Unavailable
 }
 
@@ -15,22 +16,36 @@ internal static class ProviderAvailabilityCheck
     public static Task<ProviderCheckResult> CheckAsync(DnsProvider provider, CancellationToken cancellationToken)
         => CheckAsync(provider,
             token => DnsRefreshService.ResolveAsync(provider, token),
-            (endpoints, token) => DnsHealthCheck.EnsureAvailableAsync(endpoints, token),
+            (endpoints, token) => DnsHealthCheck.CheckSitesAsync(endpoints, token),
             cancellationToken);
 
     internal static async Task<ProviderCheckResult> CheckAsync(DnsProvider provider,
         Func<CancellationToken, Task<DnsEndpoints>> resolve,
-        Func<DnsEndpoints, CancellationToken, Task> checkDns,
+        Func<DnsEndpoints, CancellationToken, Task<SiteAccess>> checkSites,
         CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        timeout.CancelAfter(TimeSpan.FromSeconds(35));
+        DnsEndpoints endpoints;
         try
         {
-            var endpoints = await resolve(timeout.Token).ConfigureAwait(false);
-            await checkDns(endpoints, timeout.Token).ConfigureAwait(false);
-            return new(ProviderAvailability.Available,
-                "DNS отвечает. Доступ к отдельным сайтам не проверен.");
+            using var resolveTimeout = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
+            resolveTimeout.CancelAfter(TimeSpan.FromSeconds(8));
+            endpoints = await resolve(resolveTimeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            endpoints = DnsCatalog.EndpointsFrom(provider);
+        }
+
+        try
+        {
+            var access = await checkSites(endpoints, timeout.Token).ConfigureAwait(false);
+            return new(access.Status, access.Description);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

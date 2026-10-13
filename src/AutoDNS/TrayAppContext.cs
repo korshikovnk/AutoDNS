@@ -16,11 +16,15 @@ internal sealed class TrayAppContext : ApplicationContext
     private readonly RegisteredWaitHandle _shutdownWait;
     private readonly Icon _iconOff;
     private readonly Icon _iconOn;
+    private readonly Icon _iconPartial;
+    private readonly Icon _iconDown;
 
     private readonly AppSettings _settings;
     private bool _busy;
     private bool _rebuilding;
-    private bool _keepMenuOpen;
+    private bool _allowMenuClose;
+    private ProviderAvailability _connectedSites = ProviderAvailability.Available;
+    private bool _connectedCheckRunning;
     private string? _pendingProviderId;
     private string? _operationStatus;
     private string? _lastConnectionError;
@@ -47,8 +51,9 @@ internal sealed class TrayAppContext : ApplicationContext
 
         _menu = new ContextMenuStrip
         {
-            ShowImageMargin = false,
-            ShowCheckMargin = true
+            ShowImageMargin = true,
+            ShowCheckMargin = true,
+            ShowItemToolTips = true
         };
         _menu.Opening += (_, _) =>
         {
@@ -58,6 +63,8 @@ internal sealed class TrayAppContext : ApplicationContext
 
         _iconOff = IconFactory.CreateTrayIcon(Color.White);
         _iconOn = IconFactory.CreateTrayIcon(AppConstants.ActiveGreen);
+        _iconPartial = IconFactory.CreateTrayIcon(AppConstants.AlertYellow);
+        _iconDown = IconFactory.CreateTrayIcon(AppConstants.AlertRed);
 
         _notifyIcon = new NotifyIcon
         {
@@ -85,6 +92,7 @@ internal sealed class TrayAppContext : ApplicationContext
         {
             await CheckAutoUpdateAsync().ConfigureAwait(true);
             await RefreshProviderStatusesAsync().ConfigureAwait(true);
+            await CheckConnectedDnsAsync().ConfigureAwait(true);
         };
         _timer.Start();
 
@@ -106,7 +114,7 @@ internal sealed class TrayAppContext : ApplicationContext
             return;
 
         if (!_settings.HasCompletedFirstRun || _settings.LastUpdateUtc is null || _settings.IsUpdateDue())
-            await RefreshAndApplyAsync(showBalloon: !_settings.HasCompletedFirstRun).ConfigureAwait(true);
+            await RefreshAndApplyAsync().ConfigureAwait(true);
     }
 
     private async Task CheckAutoUpdateAsync()
@@ -114,7 +122,7 @@ internal sealed class TrayAppContext : ApplicationContext
         if (_busy || !_settings.DnsEnabled || !_settings.IsUpdateDue())
             return;
 
-        await RefreshAndApplyAsync(showBalloon: false).ConfigureAwait(true);
+        await RefreshAndApplyAsync().ConfigureAwait(true);
     }
 
     private void Ui(Action action)
@@ -135,7 +143,7 @@ internal sealed class TrayAppContext : ApplicationContext
             SetForegroundWindow(_menu.Handle);
     }
 
-    private async Task RefreshAndApplyAsync(bool showBalloon, string? selectedProviderId = null)
+    private async Task RefreshAndApplyAsync(string? selectedProviderId = null)
     {
         if (_busy)
             return;
@@ -158,11 +166,10 @@ internal sealed class TrayAppContext : ApplicationContext
                 _settings.HasCompletedFirstRun = true;
                 _settings.LastUpdateUtc = DateTimeOffset.UtcNow;
                 _settings.Save();
+                _connectedSites = ProviderAvailability.Available;
                 _notifyIcon.Text = TooltipText();
                 ApplyTrayIcon();
                 UpdateLastUpdateText();
-                if (showBalloon)
-                    ShowBalloon("DNS сброшен к автоматическим адресам.");
                 return;
             }
 
@@ -194,19 +201,19 @@ internal sealed class TrayAppContext : ApplicationContext
             _settings.DnsEnabled = true;
             _settings.LastUpdateUtc = DateTimeOffset.UtcNow;
             _settings.Save();
+            _connectedSites = ProviderAvailability.Available;
 
             _notifyIcon.Text = TooltipText();
             ApplyTrayIcon();
             UpdateLastUpdateText();
-
-            if (showBalloon)
-                ShowBalloon("Настройки DNS " + provider.DisplayName + " применены.");
         }
         catch (Exception ex)
         {
             _lastConnectionError = PendingProviderName() + ": "
                 + (ex is ProviderUnavailableException ? "сервис недоступен" : "ошибка подключения");
-            ShowBalloon("Не удалось настроить DNS: " + ex.Message);
+            if (_settings.DnsEnabled
+                && string.Equals(providerId, _settings.ProviderId, StringComparison.OrdinalIgnoreCase))
+                _connectedSites = ProviderAvailability.Unavailable;
         }
         finally
         {
@@ -222,9 +229,7 @@ internal sealed class TrayAppContext : ApplicationContext
     }
 
     private IEnumerable<ProviderMenuItem> ProviderItems() =>
-        _menu.Items["providers"] is ToolStripMenuItem providers
-            ? providers.DropDownItems.OfType<ProviderMenuItem>()
-            : [];
+        _menu.Items.OfType<ProviderMenuItem>();
 
     private async Task RefreshProviderStatusesAsync(bool force = false)
     {
@@ -246,7 +251,10 @@ internal sealed class TrayAppContext : ApplicationContext
                 {
                     var result = await ProviderAvailabilityCheck.CheckAsync(provider, token).ConfigureAwait(true);
                     if (!token.IsCancellationRequested)
+                    {
                         item.SetAvailability(result.Status, result.Description + " Проверено в " + DateTime.Now.ToString("HH:mm"));
+                        NoteConnectedStatus(provider.Id, result.Status);
+                    }
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { }
             })).ConfigureAwait(true);
@@ -257,6 +265,50 @@ internal sealed class TrayAppContext : ApplicationContext
             if (!_lifetime.IsCancellationRequested && !_busy)
                 _animationTimer.Stop();
         }
+    }
+
+    private async Task CheckConnectedDnsAsync()
+    {
+        if (_connectedCheckRunning || _busy || _statusCheckRunning || !_settings.DnsEnabled
+            || _lifetime.IsCancellationRequested || AppSettings.IsAutomatic(_settings.ProviderId))
+            return;
+
+        var provider = DnsCatalog.Find(_settings.ProviderId);
+        if (provider is null)
+            return;
+
+        _connectedCheckRunning = true;
+        try
+        {
+            var result = await ProviderAvailabilityCheck.CheckAsync(provider, _lifetime.Token).ConfigureAwait(true);
+            if (_lifetime.IsCancellationRequested)
+                return;
+
+            ProviderItems().FirstOrDefault(item => item.ProviderId == provider.Id)
+                ?.SetAvailability(result.Status, result.Description + " Проверено в " + DateTime.Now.ToString("HH:mm"));
+            NoteConnectedStatus(provider.Id, result.Status);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _connectedCheckRunning = false;
+        }
+    }
+
+    private void NoteConnectedStatus(string providerId, ProviderAvailability status)
+    {
+        if (_busy || !_settings.DnsEnabled
+            || !string.Equals(providerId, _settings.ProviderId, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (status is not (ProviderAvailability.Available or ProviderAvailability.Partial or ProviderAvailability.Unavailable))
+            return;
+
+        _connectedSites = status;
+
+        ApplyTrayIcon();
     }
 
     private void SetOperationStatus(string status)
@@ -293,33 +345,22 @@ internal sealed class TrayAppContext : ApplicationContext
         _rebuilding = true;
         _menu.Items.Clear();
 
-        var providerName = new ToolStripMenuItem(FormatProviderName()) { Enabled = false, Name = "providerName" };
-        _menu.Items.Add(providerName);
-
         var lastUpdate = new ToolStripMenuItem(FormatLastUpdate()) { Enabled = false, Name = "lastUpdate" };
         _menu.Items.Add(lastUpdate);
-        _menu.Items.Add(new ToolStripSeparator());
 
         var apply = new ToolStripMenuItem("Обновить DNS") { Name = "apply" };
         apply.Click += async (_, _) => await Task.WhenAll(
-            RefreshAndApplyAsync(showBalloon: true), RefreshProviderStatusesAsync(force: true)).ConfigureAwait(true);
+            RefreshAndApplyAsync(), RefreshProviderStatusesAsync(force: true)).ConfigureAwait(true);
         _menu.Items.Add(apply);
+        _menu.Items.Add(new ToolStripSeparator());
 
-        var providers = new ToolStripMenuItem("Поставщик DNS") { Name = "providers" };
-        if (providers.DropDown is ToolStripDropDownMenu providerMenu)
-        {
-            providerMenu.ShowImageMargin = true;
-            providerMenu.ShowCheckMargin = true;
-        }
-        providers.DropDown.Closing += OnMenuClosing;
-        providers.DropDown.ShowItemToolTips = true;
         var automatic = new ProviderMenuItem(AppConstants.AutomaticProviderName, AppConstants.AutomaticProviderId)
         {
             Checked = AppSettings.IsAutomatic(_settings.ProviderId),
             Tag = AppConstants.AutomaticProviderId
         };
         automatic.Click += OnProviderClicked;
-        providers.DropDownItems.Add(automatic);
+        _menu.Items.Add(automatic);
         foreach (var provider in DnsCatalog.All)
         {
             var item = new ProviderMenuItem(provider.DisplayName, provider.Id)
@@ -329,9 +370,18 @@ internal sealed class TrayAppContext : ApplicationContext
             };
             item.SetAvailability(ProviderAvailability.Unknown, "DNS ещё не проверен.");
             item.Click += OnProviderClicked;
-            providers.DropDownItems.Add(item);
+            _menu.Items.Add(item);
         }
-        _menu.Items.Add(providers);
+
+        _menu.Items.Add(new ToolStripSeparator());
+
+        var autoStart = new ToolStripMenuItem("Автозапуск")
+        {
+            CheckOnClick = true,
+            Checked = _settings.AutoStart
+        };
+        autoStart.Click += OnAutoStartClicked;
+        _menu.Items.Add(autoStart);
 
         var autoUpdate = new ToolStripMenuItem("Автообновление");
         autoUpdate.DropDown.Closing += OnMenuClosing;
@@ -342,21 +392,17 @@ internal sealed class TrayAppContext : ApplicationContext
         autoUpdate.DropDownItems.Add(CreateIntervalItem("Каждый месяц", AutoUpdateInterval.Month));
         _menu.Items.Add(autoUpdate);
 
-        var autoStart = new ToolStripMenuItem("Автозапуск")
-        {
-            CheckOnClick = true,
-            Checked = _settings.AutoStart
-        };
-        autoStart.Click += OnAutoStartClicked;
-        _menu.Items.Add(autoStart);
-
         _menu.Items.Add(new ToolStripSeparator());
 
-        var close = new ToolStripMenuItem("Закрыть") { Name = "close" };
-        close.Click += (_, _) => ExitApp();
+        var close = new ToolStripMenuItem("Закрыть программу") { Name = "close" };
+        close.Click += (_, _) =>
+        {
+            _allowMenuClose = true;
+            ExitApp();
+        };
         _menu.Items.Add(close);
 
-        var uninstall = new ToolStripMenuItem("Удалить") { Name = "uninstall" };
+        var uninstall = new ToolStripMenuItem("Удалить программу") { Name = "uninstall" };
         uninstall.Click += (_, _) => OnUninstallClicked();
         _menu.Items.Add(uninstall);
 
@@ -365,13 +411,12 @@ internal sealed class TrayAppContext : ApplicationContext
 
     private void OnMenuClosing(object? sender, ToolStripDropDownClosingEventArgs e)
     {
-        if (_keepMenuOpen && e.CloseReason == ToolStripDropDownCloseReason.ItemClicked)
-        {
-            e.Cancel = true;
-            if (ReferenceEquals(sender, _menu))
-                _hidden.BeginInvoke(() => _keepMenuOpen = false);
-        }
+        var allowDismiss = _allowMenuClose && ReferenceEquals(sender, _menu);
+        e.Cancel = ShouldCancelMenuClose(e.CloseReason, allowDismiss);
     }
+
+    internal static bool ShouldCancelMenuClose(ToolStripDropDownCloseReason reason, bool allowDismiss) =>
+        reason == ToolStripDropDownCloseReason.ItemClicked && !allowDismiss;
 
     private ToolStripMenuItem CreateIntervalItem(string text, AutoUpdateInterval interval)
     {
@@ -390,8 +435,7 @@ internal sealed class TrayAppContext : ApplicationContext
         if (_rebuilding || _busy || sender is not ProviderMenuItem item)
             return;
 
-        _keepMenuOpen = true;
-        await RefreshAndApplyAsync(showBalloon: true, selectedProviderId: item.ProviderId).ConfigureAwait(true);
+        await RefreshAndApplyAsync(item.ProviderId).ConfigureAwait(true);
     }
 
     private void OnIntervalClicked(object? sender, EventArgs e)
@@ -399,7 +443,6 @@ internal sealed class TrayAppContext : ApplicationContext
         if (_rebuilding || sender is not ToolStripMenuItem item || item.Tag is not AutoUpdateInterval interval)
             return;
 
-        _keepMenuOpen = true;
         _settings.AutoUpdate = interval;
         _settings.Save();
 
@@ -415,12 +458,13 @@ internal sealed class TrayAppContext : ApplicationContext
         }
 
         if (_settings.DnsEnabled && _settings.IsUpdateDue())
-            _ = RefreshAndApplyAsync(showBalloon: false);
+            _ = RefreshAndApplyAsync();
         _ = RefreshProviderStatusesAsync();
     }
 
     private void OnUninstallClicked()
     {
+        _allowMenuClose = true;
         var answer = MessageBox.Show(
             "Удалить AutoDNS с компьютера?\nDNS вернётся к автоматическим адресам, программа и автозапуск будут удалены.",
             AppConstants.ProductName,
@@ -428,7 +472,10 @@ internal sealed class TrayAppContext : ApplicationContext
             MessageBoxIcon.Warning,
             MessageBoxDefaultButton.Button2);
         if (answer != DialogResult.Yes)
+        {
+            _allowMenuClose = false;
             return;
+        }
 
         try
         {
@@ -436,18 +483,15 @@ internal sealed class TrayAppContext : ApplicationContext
         }
         catch (Exception ex)
         {
-            ShowBalloon("Не удалось удалить приложение: " + ex.Message);
+            MessageBox.Show(
+                "Не удалось удалить приложение: " + ex.Message,
+                AppConstants.ProductName,
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
             return;
         }
 
         ExitApp();
-    }
-
-    private void ShowBalloon(string text)
-    {
-        _notifyIcon.BalloonTipTitle = AppConstants.ProductName;
-        _notifyIcon.BalloonTipText = text;
-        _notifyIcon.ShowBalloonTip(4000);
     }
 
     private void OnAutoStartClicked(object? sender, EventArgs e)
@@ -455,7 +499,6 @@ internal sealed class TrayAppContext : ApplicationContext
         if (_rebuilding || sender is not ToolStripMenuItem item)
             return;
 
-        _keepMenuOpen = true;
         _settings.AutoStart = item.Checked;
         _settings.Save();
         TaskSchedulerService.SetLogonEnabled(item.Checked);
@@ -463,8 +506,6 @@ internal sealed class TrayAppContext : ApplicationContext
 
     private void UpdateLastUpdateText()
     {
-        if (_menu.Items["providerName"] is ToolStripMenuItem providerItem)
-            providerItem.Text = _busy ? "Подключение: " + PendingProviderName() : FormatProviderName();
         if (_menu.Items["lastUpdate"] is ToolStripMenuItem item)
             item.Text = _operationStatus ?? _lastConnectionError ?? FormatLastUpdate();
     }
@@ -490,7 +531,10 @@ internal sealed class TrayAppContext : ApplicationContext
     private string TooltipText()
     {
         var name = FormatProviderName();
-        var state = _settings.DnsEnabled ? "включён" : "выключен";
+        var state = !_settings.DnsEnabled ? "выключен"
+            : _connectedSites == ProviderAvailability.Unavailable ? "не отвечает"
+            : _connectedSites == ProviderAvailability.Partial ? "частично"
+            : "включён";
         var text = _busy
             ? AppConstants.ProductName + " — подключение: " + PendingProviderName()
             : AppConstants.ProductName + " — " + name + " (" + state + ")";
@@ -499,7 +543,10 @@ internal sealed class TrayAppContext : ApplicationContext
 
     private void ApplyTrayIcon()
     {
-        _notifyIcon.Icon = _settings.DnsEnabled ? _iconOn : _iconOff;
+        _notifyIcon.Icon = !_settings.DnsEnabled ? _iconOff
+            : _connectedSites == ProviderAvailability.Unavailable ? _iconDown
+            : _connectedSites == ProviderAvailability.Partial ? _iconPartial
+            : _iconOn;
     }
 
     private void ExitApp()
@@ -528,6 +575,8 @@ internal sealed class TrayAppContext : ApplicationContext
             _notifyIcon.Dispose();
             _iconOff.Dispose();
             _iconOn.Dispose();
+            _iconPartial.Dispose();
+            _iconDown.Dispose();
             _hidden.Dispose();
         }
 
