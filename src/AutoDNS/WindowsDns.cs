@@ -14,8 +14,6 @@ internal static class WindowsDns
         if (endpoints.Ipv4.Count == 0)
             throw new InvalidOperationException("У поставщика нет IPv4 DNS-адресов.");
 
-        HostsCleanup.RemoveManagedBlock();
-
         foreach (var ip in DohServers(endpoints))
             RegisterDoh(ip, endpoints.DohTemplate);
         foreach (var ip in PlainServers(endpoints))
@@ -66,7 +64,6 @@ internal static class WindowsDns
         }
 
         BrowserDns.Restore();
-        HostsCleanup.RemoveManagedBlock();
         FlushDns();
     }
 

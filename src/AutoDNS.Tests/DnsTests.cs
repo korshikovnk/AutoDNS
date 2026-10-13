@@ -62,24 +62,6 @@ public class DnsCatalogTests
     }
 }
 
-public class HostsCleanupTests
-{
-    [Fact]
-    public void RemoveManagedSection_RemovesOnlyManagedBlock()
-    {
-        var original = "127.0.0.1 localhost\r\n# custom\r\n1.2.3.4 example.test\r\n"
-                       + AppConstants.ManagedBegin + "\r\n45.1.2.3 chatgpt.com\r\n"
-                       + AppConstants.ManagedEnd + "\r\n";
-
-        var updated = HostsCleanup.RemoveManagedSection(original);
-
-        Assert.Contains("example.test", updated);
-        Assert.Contains("localhost", updated);
-        Assert.DoesNotContain(AppConstants.ManagedBegin, updated);
-        Assert.DoesNotContain("chatgpt.com", updated);
-    }
-}
-
 public class BrowserDnsTests
 {
     [Fact]

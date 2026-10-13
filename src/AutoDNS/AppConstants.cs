@@ -7,9 +7,6 @@ internal static class AppConstants
     public const string AutomaticProviderId = "auto";
     public const string AutomaticProviderName = "Авто";
 
-    public const string ManagedBegin = "# ===== AutoDNS BEGIN =====";
-    public const string ManagedEnd = "# ===== AutoDNS END =====";
-
     public const string LogonTaskName = "AutoDNS";
     public const string RunTaskName = "AutoDNS.Run";
 
@@ -17,8 +14,6 @@ internal static class AppConstants
     public const string ShutdownEventName = @"Global\AutoDNS.Shutdown";
 
     public const string LegacyProductName = "AutoHosts";
-    public const string LegacyManagedBegin = "# ===== AutoHosts BEGIN =====";
-    public const string LegacyManagedEnd = "# ===== AutoHosts END =====";
     public const string LegacyLogonTaskName = "AutoHosts";
     public const string LegacyRunTaskName = "AutoHosts.Run";
 
@@ -31,12 +26,6 @@ internal static class AppConstants
     public static string SettingsPath => Path.Combine(DataDirectory, "settings.json");
 
     public static string LegacySettingsPath => Path.Combine(LegacyDataDirectory, "settings.json");
-
-    public static string HostsPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.System),
-        "drivers",
-        "etc",
-        "hosts");
 
     public static string ExePath =>
         Environment.ProcessPath
