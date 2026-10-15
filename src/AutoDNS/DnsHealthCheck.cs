@@ -14,9 +14,7 @@ internal static class TargetSites
     [
         new("ChatGPT", "chatgpt.com"),
         new("Gemini", "gemini.google.com"),
-        new("Claude", "claude.ai"),
-        new("Grok", "grok.com"),
-        new("Cursor", "cursor.com")
+        new("Claude", "claude.ai")
     ];
 }
 

@@ -12,7 +12,7 @@ public class ProviderAvailabilityTests
             _ => Task.FromResult(DnsCatalog.EndpointsFrom(provider)),
             (_, _) => OpenSites(), CancellationToken.None);
         Assert.Equal(ProviderAvailability.Available, result.Status);
-        Assert.Equal("ChatGPT, Gemini, Claude, Grok и Cursor открываются.", result.Description);
+        Assert.Equal("ChatGPT, Gemini и Claude открываются.", result.Description);
         Assert.DoesNotContain("не проверен", result.Description);
     }
 

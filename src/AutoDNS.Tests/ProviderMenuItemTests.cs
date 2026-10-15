@@ -25,7 +25,7 @@ public class ProviderMenuItemTests
             partial.UpdateState("malw", null);
             unavailable.UpdateState("malw", null);
             available.SetAvailability(ProviderAvailability.Available, "Все открываются");
-            partial.SetAvailability(ProviderAvailability.Partial, "Не открывается: Cursor.");
+            partial.SetAvailability(ProviderAvailability.Partial, "Не открывается: Gemini.");
             unavailable.SetAvailability(ProviderAvailability.Unavailable, "Не открываются все");
             Assert.Null(available.Image);
             menu.CreateControl();

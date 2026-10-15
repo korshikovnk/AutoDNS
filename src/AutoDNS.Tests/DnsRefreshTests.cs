@@ -78,12 +78,12 @@ public class DnsRefreshTests
     [Fact]
     public void SiteAccessDescription_NamesFailures_WithoutUncheckedDisclaimer()
     {
-        Assert.Equal("ChatGPT, Gemini, Claude, Grok и Cursor открываются.", DnsHealthCheck.DescribeSiteAccess([]));
-        Assert.Equal("Не открывается: Cursor.", DnsHealthCheck.DescribeSiteAccess(["Cursor"]));
-        Assert.Equal("Не открываются: Claude, Cursor.", DnsHealthCheck.DescribeSiteAccess(["Claude", "Cursor"]));
-        Assert.Equal(ProviderAvailability.Available, DnsHealthCheck.StatusFromFailures(0, 5));
-        Assert.Equal(ProviderAvailability.Partial, DnsHealthCheck.StatusFromFailures(1, 5));
-        Assert.Equal(ProviderAvailability.Unavailable, DnsHealthCheck.StatusFromFailures(5, 5));
+        Assert.Equal("ChatGPT, Gemini и Claude открываются.", DnsHealthCheck.DescribeSiteAccess([]));
+        Assert.Equal("Не открывается: Gemini.", DnsHealthCheck.DescribeSiteAccess(["Gemini"]));
+        Assert.Equal("Не открываются: ChatGPT, Gemini.", DnsHealthCheck.DescribeSiteAccess(["ChatGPT", "Gemini"]));
+        Assert.Equal(ProviderAvailability.Available, DnsHealthCheck.StatusFromFailures(0, 3));
+        Assert.Equal(ProviderAvailability.Partial, DnsHealthCheck.StatusFromFailures(1, 3));
+        Assert.Equal(ProviderAvailability.Unavailable, DnsHealthCheck.StatusFromFailures(3, 3));
         Assert.DoesNotContain("не проверен", DnsHealthCheck.DescribeSiteAccess([]));
     }
 
